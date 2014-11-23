@@ -1,0 +1,78 @@
+---
+title: "Practical Machine Learning"
+author: "Jay"
+date: "November 20, 2014"
+output: html_document
+---
+
+Loading the testing and Training sets
+
+```{r}
+require(caret)
+require(doMC)
+registerDoMC(cores=8)
+set.seed(888)
+
+training <- read.csv('pml-training.csv', stringsAsFactors=FALSE)
+testing <- read.csv('pml-testing.csv', stringsAsFactors=FALSE)
+training$classe <- as.factor(training$classe)
+```
+
+Writing a function to remove all Na's from the training and testing 3set.
+```{r}
+filth <- sapply(testing, function(x) {
+  if (any(is.na(x)) || x=="") FALSE
+  else TRUE
+})
+training <- training[, filth]
+testing <- testing[, filth]
+```
+
+Using 8 fold cross validation for this training process
+```{r}
+con <- trainControl(method = "cv", number = 8, allowParallel = TRUE)
+```
+
+Removing unessary data sets otherwise knitting to html takes way too long.
+```{r}
+junk <- c('X', "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp",
+          "new_window", "num_window", "problem_id")
+training <- training[, -which(names(training) %in% junk)]
+testing <- testing[, -which(names(testing) %in% junk)]
+```
+
+
+We compare the data sets using 3 models, k nearest neighbor, random forest, support vector machine with linear kernel + boosted logistic regression. Each model is tested both with and without principle component analysis. 
+KNN
+```{r}
+knn <- train(classe~., data=training, method='knn', trControl=con)
+knnpca <- train(classe~., data=training, method='knn', trControl=con, preProc='pca')
+```
+RTF
+```{r}
+rf <- train(classe~., data=training, method='rf', trControl=con)
+rfpca <- train(classe~., data=training, method='rf', trControl=con, preProc='pca')
+```
+SVM
+```{r}
+svm <- train(classe~., data=training, method='svmLinear', trControl=con)
+svmpca <- train(classe~., data=training, method='svmLinear', trControl=con, preProc='pca')
+```
+
+Printing the kappa values of each model. 
+```{r, echo=TRUE}
+result <- data.frame(Model=c('KNN', 'KNN_PCA', 'RandomForest', 'RandomForest_PCA', 'SVM', 'SVM_PCA'),
+                     Kappa=c(knn$results$Kappa[1], knnpca$results$Kappa[1],
+                             rf$results$Kappa[1], rfpca$results$Kappa[1],
+                             svm$results$Kappa, svmpca$results$Kappa))
+result
+```
+
+From the previous results, we can determine the model with the highest accuracy from its kappa value is random forest model. Principle component analysis results in less accuracy on all models except k nearest neighbor.
+
+Applying the random forest model on the training set.
+```{r, echo=TRUE}
+predict(rf, newdata=testing)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
